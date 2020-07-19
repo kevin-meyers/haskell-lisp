@@ -6,9 +6,6 @@ import Lib
 
 main :: IO ()
 main = do
-  args <- getArgs
-  putStrLn $ "Hello, " ++ show (sumStrings args)
-
-sumStrings :: [String] -> Int
-sumStrings = sum . map read
-
+    putStrLn "Who are you?"
+    name <- getLine
+    putStrLn $ "Hello, " ++ name
