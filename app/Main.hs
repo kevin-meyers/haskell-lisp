@@ -5,6 +5,15 @@ import System.Environment
 
 import Lib
 
+
+data LispVal = Atom String
+             | List [LispVal]
+             | DottedList [LispVal] LispVal
+             | Number Integer
+             | String String
+             | Bool Bool
+
+           
 main :: IO ()
 main = do
     (expr:_) <- getArgs
@@ -20,3 +29,12 @@ readExpr input = case parse (spaces >> symbol) "lisp" input of
 
 spaces :: Parser ()
 spaces = skipMany1 space
+
+parseString :: Parser LispVal
+parseString = do
+    char '"'
+    x <- many (noneOf '\"')
+    char '"'
+    return $ String x
+
+
