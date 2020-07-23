@@ -14,7 +14,20 @@ data LispVal = Atom String
              | String String
              | Bool Bool
 
-           
+instance Show LispVal where show = showVal
+
+showVal :: LispVal -> String
+showVal (Atom name) = name
+showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Number contents) = show contents
+showVal (Bool True) = "#t"
+showVal (Bool False) = "#f"
+showVal (List contents) = "(" ++ unwordsList contents ++ ")"
+showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
+
+unwordsList :: [LispVal] -> String
+unwordsList = unwords . map showVal
+
 main :: IO ()
 main = do
     (expr:_) <- getArgs
@@ -26,7 +39,7 @@ symbol = oneOf "!#$%&|*+-/:<=>?@^_~"
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
     Left err -> "No match: " ++ show err
-    Right _ -> "Found value"
+    Right val -> "Found: " ++ show val
 
 spaces :: Parser ()
 spaces = skipMany1 space
@@ -89,8 +102,33 @@ parseDec = do
     return $ convertBase xs 10 digitToInt
 
 parseNumber :: Parser LispVal
-parseNumber = Number . fromIntegral <$> (parseOct <|> parseHex <|> parseBin <|> parseDec)
+parseNumber = Number . fromIntegral <$> (try parseOct <|> try parseHex <|> try parseBin <|> try parseDec)
 
 parseExpr :: Parser LispVal
-parseExpr = parseAtom
+parseExpr = parseNumber
+        <|> parseAtom
         <|> parseString
+        <|> parseQuoted
+        <|> parseLists
+
+parseList :: Parser LispVal
+parseList = List <$> sepBy parseExpr spaces
+
+parseDottedList :: Parser LispVal
+parseDottedList = do
+    head <- endBy parseExpr spaces
+    tail <- char '.' >> spaces >> parseExpr
+    return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted = do
+    char '\''
+    x <- parseExpr
+    return $ List [Atom "quote", x]
+
+parseLists :: Parser LispVal
+parseLists = do
+    char '('
+    x <- try parseList <|> parseDottedList
+    char ')'
+    return x
