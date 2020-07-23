@@ -2,7 +2,7 @@ module Main where
 
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
-import Data.Char (isDigit, digitToInt)
+import Data.Char (isDigit, digitToInt, intToDigit)
 
 import Lib
 
@@ -61,45 +61,41 @@ parseAtom = do
         "#f" -> Bool False
         _ -> Atom atom
 
-convertBase :: String -> Int -> (Char -> Int) -> Int
-convertBase xs base convF = foldr (\(x, i) acc -> convF x * base^i + acc) 0 $ zip xs [l-1, l-2 .. 0]
+convertBase :: String -> Int -> Int
+convertBase xs base = foldr (\(x, i) acc -> baseToDec x * base^i + acc) 0 $ zip xs [l-1, l-2 .. 0]
     where
         l = length xs
 
-
-hexToDecimal :: Char -> Int
-hexToDecimal c
+baseToDec :: Char -> Int
+baseToDec c
     | isDigit c = digitToInt c
-hexToDecimal 'A' = 10
-hexToDecimal 'B' = 11
-hexToDecimal 'C' = 12
-hexToDecimal 'D' = 13
-hexToDecimal 'E' = 14
-hexToDecimal 'F' = 15
+baseToDec 'A' = 10
+baseToDec 'B' = 11
+baseToDec 'C' = 12
+baseToDec 'D' = 13
+baseToDec 'E' = 14
+baseToDec 'F' = 15
+
+parserForBase :: Int -> Parser Char
+parserForBase base = oneOf $ take base $ map intToDigit [0..9] ++ ['A'..'Z']
+
+parseBase :: String -> Int -> Parser Int
+parseBase prefix base = do
+    string prefix
+    xs <- many1 $ parserForBase base
+    return $ convertBase xs base
 
 parseHex :: Parser Int
-parseHex = do
-    string "#x"
-    xs <- many1 hexDigit
-    return $ convertBase xs 16 hexToDecimal
+parseHex = parseBase "#x" 16
 
 parseBin :: Parser Int
-parseBin = do
-    string "#b"
-    xs <- many1 (oneOf "01")
-    return $ convertBase xs 2 digitToInt
+parseBin = parseBase "#b" 2
 
 parseOct :: Parser Int
-parseOct = do
-    string "#o"
-    xs <- many1 octDigit
-    return $ convertBase xs 8 digitToInt
+parseOct = parseBase "#o" 8
 
 parseDec :: Parser Int
-parseDec = do
-    optional $ string "#d"
-    xs <- many1 digit
-    return $ convertBase xs 10 digitToInt
+parseDec = parseBase "#d" 10 <|> parseBase "" 10
 
 parseNumber :: Parser LispVal
 parseNumber = Number . fromIntegral <$> (try parseOct <|> try parseHex <|> try parseBin <|> try parseDec)
