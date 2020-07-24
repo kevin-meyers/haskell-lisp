@@ -3,6 +3,10 @@ module Main where
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
 import Data.Char (isDigit, digitToInt, intToDigit)
+import Data.List (elemIndex)
+
+import Control.Monad.Except
+
 
 import Lib
 
@@ -25,21 +29,23 @@ showVal (Bool False) = "#f"
 showVal (List contents) = "(" ++ unwordsList contents ++ ")"
 showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
 
+isBool :: LispVal -> LispVal
+isBool (Bool _) = Bool True
+isBool _ = Bool False
+
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
 
 main :: IO ()
-main = do
-    (expr:_) <- getArgs
-    putStrLn (readExpr expr)
+main = getArgs >>= print . eval . readExpr . head
 
 symbol :: Parser Char
 symbol = oneOf "!#$%&|*+-/:<=>?@^_~"
 
-readExpr :: String -> String
+readExpr :: String -> LispVal
 readExpr input = case parse parseExpr "lisp" input of
-    Left err -> "No match: " ++ show err
-    Right val -> "Found: " ++ show val
+    Left err -> String $ "No match: " ++ show err
+    Right val -> val
 
 spaces :: Parser ()
 spaces = skipMany1 space
@@ -61,28 +67,25 @@ parseAtom = do
         "#f" -> Bool False
         _ -> Atom atom
 
+baseValues :: String
+baseValues = ['0'..'9'] ++ ['A'..'Z']
+
 convertBase :: String -> Int -> Int
 convertBase xs base = foldr (\(x, i) acc -> baseToDec x * base^i + acc) 0 $ zip xs [l-1, l-2 .. 0]
     where
         l = length xs
 
 baseToDec :: Char -> Int
-baseToDec c
-    | isDigit c = digitToInt c
-baseToDec 'A' = 10
-baseToDec 'B' = 11
-baseToDec 'C' = 12
-baseToDec 'D' = 13
-baseToDec 'E' = 14
-baseToDec 'F' = 15
+baseToDec x = valFromBase $ elemIndex x baseValues
 
-parserForBase :: Int -> Parser Char
-parserForBase base = oneOf $ take base $ map intToDigit [0..9] ++ ['A'..'Z']
+valFromBase :: Maybe Int -> Int
+valFromBase (Just n) = n
+valFromBase Nothing = error "value is larger than max base 36"
 
 parseBase :: String -> Int -> Parser Int
 parseBase prefix base = do
     string prefix
-    xs <- many1 $ parserForBase base
+    xs <- many1 $ oneOf $ take base baseValues
     return $ convertBase xs base
 
 parseHex :: Parser Int
@@ -128,3 +131,31 @@ parseLists = do
     x <- try parseList <|> parseDottedList
     char ')'
     return x
+
+eval :: LispVal -> LispVal
+eval val@(String _) = val
+eval val@(Number _) = val
+eval val@(Bool _) = val
+eval (List [Atom "quote", val]) = val
+eval (List (Atom func : args)) = apply func $ map eval args
+
+apply :: String -> [LispVal] -> LispVal
+apply func args = maybe (Bool False) ($ args) $ lookup func primitives
+
+primitives :: [(String, [LispVal] -> LispVal)]
+primitives = [("+", numericBinop (+)),
+              ("-", numericBinop (-)),
+              ("*", numericBinop (*)),
+              ("/", numericBinop div),
+              ("mod", numericBinop mod),
+              ("quotient", numericBinop quot),
+              ("remainder", numericBinop rem),
+              ("Boolean?", isBool . head )
+            ]
+
+numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
+numericBinop op = Number . foldl1 op . map unpackNum
+
+unpackNum :: LispVal -> Integer
+unpackNum (Number n) = n
+npackNum _ = 0
