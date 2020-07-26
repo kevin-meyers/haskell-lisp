@@ -242,3 +242,9 @@ unpackBool (Bool b) = return b
 unpackBool (Number 0) = return True
 unpackBool (Number 1) = return False
 unpackBool notBool  = throwError $ TypeMismatch "boolean" notBool
+
+car :: [LispVal] -> ThrowsError LispVal
+car [List (x : _)]         = return x
+car [DottedList (x : _) _] = return x
+car [badArg]                = throwError $ TypeMismatch "pair" badArg
+car badArgList              = throwError $ NumArgs 1 badArgList
